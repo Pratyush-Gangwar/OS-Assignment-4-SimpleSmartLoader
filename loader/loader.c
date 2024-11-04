@@ -4,7 +4,6 @@ Elf32_Ehdr *ehdr;
 Elf32_Phdr *phdr;
 char* virtual_mem;
 int fd;
-int ret; // stores return values of syscalls for error checking
 
 /*
  * release memory and other cleanups
@@ -31,17 +30,16 @@ void load_and_validate(char** exe) {
 
   // open() returns -1 on error
   if (fd == -1) {
-    printf("Error while opening file\n");
+    perror("Error while opening file");
     exit(1);
   }
 
   // Load first 5 bytes - first four are ELF 'magic' and fifth is ELFCLASS
   unsigned char e_ident[5];
-  ret = read(fd, e_ident, 5);
 
   // read() returns -1 on error
-  if (ret == -1) {
-    printf("Error while reading\n");
+  if (read(fd, e_ident, 5) == -1) {
+    perror("Error while reading\n");
     exit(1);
   }
   
@@ -56,12 +54,9 @@ void load_and_validate(char** exe) {
     exit(1);
   }
 
-  // Seek back to the start of the file so that ELF header can be properly loaded in load_and_run_elf()
-  ret = lseek(fd, 0, SEEK_SET);
-
   // lseek() returns (off_t) - 1 on error
-  if (ret == (off_t) - 1) {
-    printf("Error while seeking to start\n");
+  if (lseek(fd, 0, SEEK_SET) == (off_t) - 1) {   // Seek back to the start of the file so that ELF header can be properly loaded in load_and_run_elf()
+    perror("Error while seeking to start:");
     exit(1);
   }
 }
@@ -75,22 +70,20 @@ void load_and_run_elf(char** exe) {
   ehdr = malloc( sizeof(Elf32_Ehdr) ); // allocate space for ELF header
 
   if (ehdr == NULL) { // malloc returns NULL on error
-    printf("Error while malloc'ing Ehdr\n");
+    perror("Error while malloc'ing Ehdr:");
     exit(1);
   }
 
-  ret = read(fd, ehdr, sizeof(Elf32_Ehdr)); // read ELF header bytes from file to memory
-  if (ret == -1) {
-    printf("Error while reading Ehdr\n");
+  if (read(fd, ehdr, sizeof(Elf32_Ehdr)) == -1) { // read ELF header bytes from file to memory
+    perror("Error while reading Ehdr:");
     exit(1);
   }
 
   // 2. Iterate through the PHDR table and find the section of PT_LOAD 
   //    type that contains the address of the entrypoint method in fib.c
 
-  ret = lseek(fd, ehdr->e_phoff, SEEK_SET); // go to beginning of program header table
-  if (ret == (off_t) - 1) { 
-    printf("Error while seeking to program header table\n");
+  if (lseek(fd, ehdr->e_phoff, SEEK_SET) == (off_t) - 1) { // go to beginning of program header table
+    perror("Error while seeking to program header table:");
     exit(1);
   }
 
@@ -98,14 +91,13 @@ void load_and_run_elf(char** exe) {
 
   phdr = malloc( sizeof(Elf32_Phdr) ); // allocate memory for program header
   if (phdr == NULL) { 
-    printf("Error while malloc'ing Phdr");
+    perror("Error while malloc'ing Phdr");
     exit(1);
   }
 
   for(int i = 0; i < ehdr->e_phnum; i++) {
-    ret = read(fd, phdr, sizeof(Elf32_Phdr)); // read program header bytes from file to memory
-    if (ret == -1) {
-      printf("Error while reading Ehdr at index %d\n", i);
+    if (read(fd, phdr, sizeof(Elf32_Phdr)) == -1) { // read program header bytes from file to memory
+      perror("Error while reading Phdr");
       exit(1);
     }
     
@@ -117,7 +109,7 @@ void load_and_run_elf(char** exe) {
   } 
 
   if (!entry_found) {
-    printf("Entry point doesn't exist\n");
+    printf("Entry point doesn't exist");
     exit(1);
   }
 
@@ -127,19 +119,17 @@ void load_and_run_elf(char** exe) {
   // mmap returns void* but pointer arithmetic gives error with void* so store in char*
   // virtual_mem = mmap(NULL, phdr->p_memsz, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS|MAP_PRIVATE, 0, 0);
   // if (virtual_mem == MAP_FAILED) { // mmap returns MAP_FAILED if error occurs 
-  //   printf("Failed to allocate virtual memory\n");
+  //   perror("Failed to allocate virtual memory");
   //   exit(1);
   // }
 
-  // ret = lseek(fd, phdr->p_offset, SEEK_SET); // seek to beginning of segment in file
-  // if (ret == -1) {
-  //   printf("Error while seeking to the executable segment\n");
+  // if (lseek(fd, phdr->p_offset, SEEK_SET) == -1) { // seek to beginning of segment in file
+  //   perror("Error while seeking to the executable segment");
   //   exit(1);
   // }
 
-  // ret = read(fd, virtual_mem, phdr->p_filesz ); // read segment bytes from file to memory
-  // if (ret == -1) {
-  //   printf("Error while writing bytes from file to virtual memory\n");
+  // if (read(fd, virtual_mem, phdr->p_filesz ) == -1) { // read segment bytes from file to memory
+  //   perror("Error while writing bytes from file to virtual memory");
   //   exit(1);
   // }
 
