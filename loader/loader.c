@@ -12,9 +12,6 @@ void loader_cleanup() {
   // close the file
   close(fd);
 
-  // free mmap'd memory
-  munmap(virtual_mem, phdr->p_memsz);
-
   // free the malloc'ed memory
   free(ehdr);
   free(phdr);
@@ -89,22 +86,22 @@ void load_and_run_elf(char** exe) {
 
   int entry_found = 0; // flag to check if entry point was found
 
-  phdr = malloc( sizeof(Elf32_Phdr) ); // allocate memory for program header
+  phdr = malloc( ehdr->e_phnum * sizeof(Elf32_Phdr) ); // allocate memory for program header array
+
   if (phdr == NULL) { 
     perror("Error while malloc'ing Phdr");
     exit(1);
   }
 
   for(int i = 0; i < ehdr->e_phnum; i++) {
-    if (read(fd, phdr, sizeof(Elf32_Phdr)) == -1) { // read program header bytes from file to memory
+    if (read(fd, &phdr[i], sizeof(Elf32_Phdr)) == -1) { // read program header bytes from file to memory
       perror("Error while reading Phdr");
       exit(1);
     }
     
     // segment must be of type PT_LOAD and entry_point must lie in range [p_vaddr, p_vaddr + p_memsz)
-    if (phdr->p_type == PT_LOAD && phdr->p_vaddr <= ehdr->e_entry && ehdr->e_entry < phdr->p_vaddr + phdr->p_memsz) {
+    if (phdr[i].p_type == PT_LOAD && phdr[i].p_vaddr <= ehdr->e_entry && ehdr->e_entry < phdr[i].p_vaddr + phdr[i].p_memsz) {
       entry_found = 1; 
-      break;
     } 
   } 
 
@@ -113,40 +110,7 @@ void load_and_run_elf(char** exe) {
     exit(1);
   }
 
-  // 3. Allocate memory of the size "p_memsz" using mmap function 
-  //    and then copy the segment content
-
-  // mmap returns void* but pointer arithmetic gives error with void* so store in char*
-  // virtual_mem = mmap(NULL, phdr->p_memsz, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS|MAP_PRIVATE, 0, 0);
-  // if (virtual_mem == MAP_FAILED) { // mmap returns MAP_FAILED if error occurs 
-  //   perror("Failed to allocate virtual memory");
-  //   exit(1);
-  // }
-
-  // if (lseek(fd, phdr->p_offset, SEEK_SET) == -1) { // seek to beginning of segment in file
-  //   perror("Error while seeking to the executable segment");
-  //   exit(1);
-  // }
-
-  // if (read(fd, virtual_mem, phdr->p_filesz ) == -1) { // read segment bytes from file to memory
-  //   perror("Error while writing bytes from file to virtual memory");
-  //   exit(1);
-  // }
-
-  // Remaining bytes must be set to 0
-  // if (phdr->p_memsz > phdr->p_filesz) {
-  //   char* memset_addr = virtual_mem + phdr->p_filesz; // already filed file_sz bytes
-  //   int numClearBytes = phdr->p_memsz - phdr->p_filesz; // total bytes = mem_sz = file_sz + numClearBytes
-
-  //   memset(memset_addr, 0, numClearBytes);
-  // }
-
-  // 4. Navigate to the entrypoint address into the segment loaded in the memory in above step
-  // int offset = ehdr->e_entry - phdr->p_vaddr; // how many bytes from p_vaddr does entry_point reside
-  // char* actual_entry = virtual_mem + offset;
-
   // 5. Typecast the address to that of function pointer matching "_start" method in fib.c.
-  // int (*_start)() = ( int(*)() ) actual_entry;
   int (*_start)() = ( int(*)() ) ehdr->e_entry;
 
   // 6. Call the "_start" method and print the value returned from the "_start"
