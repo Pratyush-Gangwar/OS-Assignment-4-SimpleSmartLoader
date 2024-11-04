@@ -11,6 +11,10 @@ extern Elf32_Ehdr *ehdr;
 extern Elf32_Phdr *phdr;
 extern int fd;
 
+int min(int a, int b) {
+    return ( a <= b ? a : b );
+}
+
 int get_segment_idx(void* fault_addr) {
     for(int i = 0; i < ehdr->e_phnum; i++) {    
                 
@@ -53,9 +57,22 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
         exit(1);
     }
 
-    // file may have less than PAGE_SIZE bytes but read() wont give an error
-    int bytes = read(fd, mmap_addr, PAGE_SIZE);
-    if (bytes == -1) { // read segment bytes from file to memory
+    // vaddr + filesz - 1 is the address of last byte in the segment read from disk
+    // total bytes are (address of last byte from disk) - (page start) + 1
+    // if memsz > filesz, then last byte in segment is vaddr + memsz - 1 but last byte read from disk is still vaddr + filesz - 1
+
+    // Case 1: filesz <= PAGE_SIZE. Only one page is required. 4KB has already been allocated by mmap. 
+    // We read vaddr + filesz - page_start bytes from the file
+
+    // Case 2: filesz > PAGE_SIZE. Two or more pages are required. One 4KB page has already been allocated by mmap.
+    // If N pages are required (N = ceil(filesz/PAGE_SIZE)), then first N-1 pages in memory are fully filled from the bytes on the disk
+    // the last page may or may not be fully filled by bytes from disk
+
+    // Case 2.1: Faulty address arose from 1 ... N - 1 page. Full PAGE_SIZE read from disk
+    // Case 2.2: Faulty address arose from N page. min( vaddr + filesz - page_start, PAGE_SIZE) bytes read from the file
+
+    int bytes = min(phdr[idx].p_vaddr + phdr[idx].p_filesz - (int) page_start, PAGE_SIZE);
+    if (read(fd, mmap_addr, PAGE_SIZE) == -1) { // read segment bytes from file to memory
         perror("Error while writing bytes from file to virtual memory");
         exit(1);
     }
