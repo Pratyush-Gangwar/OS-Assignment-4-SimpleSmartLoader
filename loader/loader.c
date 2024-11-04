@@ -1,4 +1,4 @@
-#include "loader.h"
+#include "../headers.h"
 
 Elf32_Ehdr *ehdr;
 Elf32_Phdr *phdr;

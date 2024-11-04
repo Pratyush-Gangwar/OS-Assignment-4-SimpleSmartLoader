@@ -1,14 +1,10 @@
-#invoke make inside following directories and in this order: loader, launch, fib
-#move the lib_simpleloader.so and launch binaries inside bin directory
-#Provide the command for cleanup
+all: launch.out ./test/fib.out
 
-all:
-	cd ./loader && make && cp lib_simpleloader.so ../bin
-	cd ./launcher && make && cp launch.out ../bin
-	cd ./test && make
+launch.out: launch.c ./signals/signal_handler.c ./loader/loader.c
+	gcc -m32 launch.c ./signals/signal_handler.c ./loader/loader.c -o launch.out
+
+./test/fib.out: ./test/fib.c 
+	gcc  -m32 -no-pie -nostdlib -o ./test/fib.out ./test/fib.c
 
 clean:
-	rm ./bin/*
-	cd ./loader && make clean
-	cd ./launcher && make clean
-	cd ./test && make clean
+	rm launch.out ./test/fib.out
