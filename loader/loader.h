@@ -14,3 +14,7 @@
 
 void load_and_run_elf(char** exe);
 void loader_cleanup();
+
+// Assignment 4 changes
+#include <signal.h>
+void setup_signal_handlers();
