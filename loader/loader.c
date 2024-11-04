@@ -125,38 +125,39 @@ void load_and_run_elf(char** exe) {
   //    and then copy the segment content
 
   // mmap returns void* but pointer arithmetic gives error with void* so store in char*
-  virtual_mem = mmap(NULL, phdr->p_memsz, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS|MAP_PRIVATE, 0, 0);
-  if (virtual_mem == MAP_FAILED) { // mmap returns MAP_FAILED if error occurs 
-    printf("Failed to allocate virtual memory\n");
-    exit(1);
-  }
+  // virtual_mem = mmap(NULL, phdr->p_memsz, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS|MAP_PRIVATE, 0, 0);
+  // if (virtual_mem == MAP_FAILED) { // mmap returns MAP_FAILED if error occurs 
+  //   printf("Failed to allocate virtual memory\n");
+  //   exit(1);
+  // }
 
-  ret = lseek(fd, phdr->p_offset, SEEK_SET); // seek to beginning of segment in file
-  if (ret == -1) {
-    printf("Error while seeking to the executable segment\n");
-    exit(1);
-  }
+  // ret = lseek(fd, phdr->p_offset, SEEK_SET); // seek to beginning of segment in file
+  // if (ret == -1) {
+  //   printf("Error while seeking to the executable segment\n");
+  //   exit(1);
+  // }
 
-  ret = read(fd, virtual_mem, phdr->p_filesz ); // read segment bytes from file to memory
-  if (ret == -1) {
-    printf("Error while writing bytes from file to virtual memory\n");
-    exit(1);
-  }
+  // ret = read(fd, virtual_mem, phdr->p_filesz ); // read segment bytes from file to memory
+  // if (ret == -1) {
+  //   printf("Error while writing bytes from file to virtual memory\n");
+  //   exit(1);
+  // }
 
   // Remaining bytes must be set to 0
-  if (phdr->p_memsz > phdr->p_filesz) {
-    char* memset_addr = virtual_mem + phdr->p_filesz; // already filed file_sz bytes
-    int numClearBytes = phdr->p_memsz - phdr->p_filesz; // total bytes = mem_sz = file_sz + numClearBytes
+  // if (phdr->p_memsz > phdr->p_filesz) {
+  //   char* memset_addr = virtual_mem + phdr->p_filesz; // already filed file_sz bytes
+  //   int numClearBytes = phdr->p_memsz - phdr->p_filesz; // total bytes = mem_sz = file_sz + numClearBytes
 
-    memset(memset_addr, 0, numClearBytes);
-  }
+  //   memset(memset_addr, 0, numClearBytes);
+  // }
 
   // 4. Navigate to the entrypoint address into the segment loaded in the memory in above step
-  int offset = ehdr->e_entry - phdr->p_vaddr; // how many bytes from p_vaddr does entry_point reside
-  char* actual_entry = virtual_mem + offset;
+  // int offset = ehdr->e_entry - phdr->p_vaddr; // how many bytes from p_vaddr does entry_point reside
+  // char* actual_entry = virtual_mem + offset;
 
   // 5. Typecast the address to that of function pointer matching "_start" method in fib.c.
-  int (*_start)() = ( int(*)() ) actual_entry;
+  // int (*_start)() = ( int(*)() ) actual_entry;
+  int (*_start)() = ( int(*)() ) ehdr->e_entry;
 
   // 6. Call the "_start" method and print the value returned from the "_start"
   int result = _start();
