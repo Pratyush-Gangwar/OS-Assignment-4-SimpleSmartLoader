@@ -102,6 +102,7 @@ void load_and_run_elf(char** exe) {
     // segment must be of type PT_LOAD and entry_point must lie in range [p_vaddr, p_vaddr + p_memsz)
     if (phdr[i].p_type == PT_LOAD && phdr[i].p_vaddr <= ehdr->e_entry && ehdr->e_entry < phdr[i].p_vaddr + phdr[i].p_memsz) {
       entry_found = 1; 
+      // no break - keep loading other program headers into the array
     } 
   } 
 
