@@ -1,0 +1,10 @@
+vaddr: 134529012 (- 134529012 = 0)
+
+vaddr + filesz - 1 (last byte of file content): 134529023 (-134529012 = 11)
+segfault1 (also segfault1 page boundary) (first byte after file content) (first byte of zero'd portion): 134529024 (- 134529012 = 12) (offset from vaddr = 12)
+
+vaddr + 4096 - 1 (last byte of non-aligned page starting at vaddr): 134533107 (- 134529012 = 4095)
+vaddr + 4096 (start of next non-aligned page): 134533108 (- 134529012 = 4096)
+
+segfault1 + 4096 - 1 (last byte of aligned page starting at segfault1 boundary): 134533119 (- 134529012 = 4107) 
+segfault2 (also, segfault2 page boundary) (first byte after last byte of segfault1 page) (segfault1 page boundary + 4096): 134533120 =  ( - 134529012 = 4108)

@@ -15,7 +15,7 @@ int min(int a, int b) {
     return ( a <= b ? a : b );
 }
 
-int get_segment_idx(void* fault_addr) {
+int get_phdr_idx(void* fault_addr) {
     for(int i = 0; i < ehdr->e_phnum; i++) {    
                 
         // fault_adrr must lie in range [p_vaddr, p_vaddr + p_memsz)
@@ -38,47 +38,114 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
     num_page_faults++; // SIGSEGV indicates invalid memory access. May be due to page fault or due to actual invalid memory access (ex, accessing out of bounds array index)
 
     void* fault_addr = info->si_addr; // address that caused SIGSEGV
-    int idx = get_segment_idx(fault_addr);
+    int phdr_idx = get_phdr_idx(fault_addr); // index of segment that the segfault address lies in
 
-    if (idx == -1) { // actual invalid access; not page fault
+    if (phdr_idx == -1) { // actual invalid access; not page fault
         return; // don't allocate page
     }
 
     void* page_start = round_down(fault_addr); // closest page boundary
-    void* mmap_addr = mmap(page_start, PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS|MAP_PRIVATE, 0, 0);
+
+    // first argument is not NULL. So, OS will try to allocate memory at the specified address (page_start)
+    // if a mapping already exists at that address, MAP_FIXED will cause the pre-existing mapping to be overwritten
+
+    // since each process has its own virtual address space, we only have to worry about mmap() overwriting the SimpleLoader's process image 
+    // we do not have to worry about it overwriting the process image for any other process
+    void* mmap_addr = mmap(page_start, PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS|MAP_PRIVATE|MAP_FIXED, 0, 0); 
 
     if (mmap_addr == MAP_FAILED) {
         perror("mmap error");
         exit(1);
     }
 
-    if (lseek(fd, phdr[idx].p_offset, SEEK_SET) == -1) { // seek to beginning of segment in file
-        perror("Error while seeking to the executable segment");
-        exit(1);
+    int offset = (char*) page_start - (char*) phdr[phdr_idx].p_vaddr; // offset of page boundary from start of segment
+    // int prev_frag = fragmentation;
+    // printf("phdr idx: %d memsz: %d vaddr: %d ", phdr_idx, phdr[phdr_idx].p_memsz, phdr[phdr_idx].p_vaddr);
+
+    
+    if (offset < phdr[phdr_idx].p_filesz) { // happens when filesz == memsz
+        int bytes = 0;
+
+        // we won't seek to start of segment in file
+        // rather, we seek to the byte in the file on disk corresponding to virtual address where the segfault occured
+        if (lseek(fd, phdr[phdr_idx].p_offset + offset, SEEK_SET) == -1) {
+            perror("Error while seeking to the executable segment");
+            exit(1);
+        }
+
+        // Case 1: filesz <= PAGE_SIZE. Only one page is required. 4KB has already been allocated by mmap. 
+        if (phdr[phdr_idx].p_filesz <= PAGE_SIZE) {
+
+            // we read filesz bytes from the file
+            // and set the remaining bytes to zero 
+            bytes = phdr[phdr_idx].p_filesz;
+            memset(page_start + bytes, 0, phdr[phdr_idx].p_memsz - phdr[phdr_idx].p_filesz);
+
+            // fragmentation calculated from memory size, not bytes read
+            fragmentation += PAGE_SIZE - phdr[phdr_idx].p_memsz; 
+        }
+
+        else {
+
+            // Case 2: filesz > PAGE_SIZE. Two or more pages are required. One 4KB page has already been allocated by mmap.
+            // If N pages are required (N = ceil(filesz/PAGE_SIZE)), then first N-1 pages in memory are fully filled from the bytes on the disk
+            // the last page may or may not be fully filled by bytes from disk
+        
+            // Case 2.1: Faulty address arose from 0 ... N - 2 page. Full PAGE_SIZE read from disk.
+            // offset = 0, PAGE_SIZE, ..., (N - 2) * PAGE_SIZE
+            // offset = (idx) * PAGE_SIZE
+
+            int page_idx = offset/PAGE_SIZE;
+            int N = phdr[phdr_idx].p_filesz/PAGE_SIZE + 1;
+
+            if (0 <= page_idx && page_idx < N - 1) {
+                bytes = PAGE_SIZE;
+                fragmentation += 0; // since we read an entire page, there's no fragementation
+            }
+
+            // Case 2.2: Faulty address arose from N - 1 page. filesz - offset bytes read from the file
+            else if (page_idx == N - 1) {
+
+                bytes = phdr[phdr_idx].p_filesz - offset;
+                memset(page_start + bytes, 0, phdr[phdr_idx].p_memsz - phdr[phdr_idx].p_filesz);
+
+                // Previous 0...N-2 pages occupy (N - 1) * PAGE_SIZE
+                // Memory occupied by this segment is memsz - memory occupied by previous pages     
+                fragmentation += PAGE_SIZE - (phdr[phdr_idx].p_memsz - (N - 1) * PAGE_SIZE);
+            }
+
+        }
+
+        if (read(fd, page_start, bytes) == -1) { // read segment bytes from file to memory
+            perror("Error while writing bytes from file to virtual memory");
+            exit(1);
+        }
+    
+    } else { // filesz < memsz
+
+        // printf("filesz < memsz ");
+        int page_idx = offset/PAGE_SIZE;
+        int N = phdr[phdr_idx].p_memsz/PAGE_SIZE + 1; // calculate N via memsz, not filesz
+
+        // printf("page idx: %d N: %d ", page_idx, N);
+
+        if (0 <= page_idx && page_idx < N - 1) {
+            // printf("(internal page) ");
+            fragmentation += 0; // since we read an entire page, there's no fragementation
+        }
+
+        // Case 2.2: Faulty address arose from N - 1 page. filesz - offset bytes read from the file
+        else if (page_idx == N - 1) {
+            fragmentation += PAGE_SIZE - (phdr[phdr_idx].p_memsz - (N - 1) * PAGE_SIZE);
+        }
+
+        // no read, just clear the bytes
+        memset(page_start, 0, PAGE_SIZE);
     }
 
-    // vaddr + filesz - 1 is the address of last byte in the segment read from disk
-    // total bytes are (address of last byte from disk) - (page start) + 1
-    // if memsz > filesz, then last byte in segment is vaddr + memsz - 1 but last byte read from disk is still vaddr + filesz - 1
-
-    // Case 1: filesz <= PAGE_SIZE. Only one page is required. 4KB has already been allocated by mmap. 
-    // We read vaddr + filesz - page_start bytes from the file
-
-    // Case 2: filesz > PAGE_SIZE. Two or more pages are required. One 4KB page has already been allocated by mmap.
-    // If N pages are required (N = ceil(filesz/PAGE_SIZE)), then first N-1 pages in memory are fully filled from the bytes on the disk
-    // the last page may or may not be fully filled by bytes from disk
-
-    // Case 2.1: Faulty address arose from 1 ... N - 1 page. Full PAGE_SIZE read from disk
-    // Case 2.2: Faulty address arose from N page. min( vaddr + filesz - page_start, PAGE_SIZE) bytes read from the file
-
-    int bytes = min(phdr[idx].p_vaddr + phdr[idx].p_filesz - (int) page_start, PAGE_SIZE);
-    if (read(fd, mmap_addr, PAGE_SIZE) == -1) { // read segment bytes from file to memory
-        perror("Error while writing bytes from file to virtual memory");
-        exit(1);
-    }
-
-    fragmentation += PAGE_SIZE - bytes;
     num_pages_allocated++;
+
+    // printf("Seg fault at %p Page boundary: %p Offset: %d Bytes read: %d Fragmentation Delta: %d \n", fault_addr, page_start, offset, bytes, fragmentation - prev_frag);
 }
 
 void setup_signal_handlers() {
