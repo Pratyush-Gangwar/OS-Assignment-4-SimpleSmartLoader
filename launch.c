@@ -22,6 +22,7 @@ int main(int argc, char** argv)
   printf("Number of pages allocated: %d\n", num_pages_allocated);
   printf("Number of page faults: %d\n", num_page_faults);
   printf("Internal fragmentation in KB: %f\n", ( (float) fragmentation )/1024);
+  // printf("Internal fragmentation in KB: %d\n", fragmentation );
 
   return 0;
 }

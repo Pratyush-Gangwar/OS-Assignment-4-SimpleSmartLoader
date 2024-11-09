@@ -81,7 +81,8 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
             bytes = phdr[phdr_idx].p_filesz;
             memset(page_start + bytes, 0, phdr[phdr_idx].p_memsz - phdr[phdr_idx].p_filesz);
 
-            fragmentation += PAGE_SIZE - bytes;
+            // fragmentation calculated from memory size, not bytes read
+            fragmentation += PAGE_SIZE - phdr[phdr_idx].p_memsz; 
         }
 
         else {
@@ -110,7 +111,7 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
 
                 // Previous 0...N-2 pages occupy (N - 1) * PAGE_SIZE
                 // Memory occupied by this segment is memsz - memory occupied by previous pages     
-                fragmentation += PAGE_SIZE - bytes;
+                fragmentation += PAGE_SIZE - (phdr[phdr_idx].p_memsz - offset);
             }
 
         }
@@ -128,7 +129,15 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
 
         // printf("page idx: %d N: %d ", page_idx, N);
 
-        fragmentation += PAGE_SIZE;
+        if (0 <= page_idx && page_idx < N - 1) {
+            // printf("(internal page) ");
+            fragmentation += 0; // since we read an entire page, there's no fragementation
+        }
+
+        // Case 2.2: Faulty address arose from N - 1 page. filesz - offset bytes read from the file
+        else if (page_idx == N - 1) {
+            fragmentation += PAGE_SIZE - (phdr[phdr_idx].p_memsz - offset);
+        }
 
         // no read, just clear the bytes
         memset(page_start, 0, PAGE_SIZE);
