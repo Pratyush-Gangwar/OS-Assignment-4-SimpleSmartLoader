@@ -62,8 +62,9 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
     // int prev_frag = fragmentation;
     // printf("phdr idx: %d memsz: %d vaddr: %d ", phdr_idx, phdr[phdr_idx].p_memsz, phdr[phdr_idx].p_vaddr);
 
-    
-    if (offset < phdr[phdr_idx].p_filesz) { // happens when filesz == memsz
+    // check if you can seek to that offset in the file
+    // happens when filesz == memsz
+    if (offset < phdr[phdr_idx].p_filesz) { 
         int bytes = 0;
 
         // we won't seek to start of segment in file
@@ -76,7 +77,7 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
         // Case 1: filesz <= PAGE_SIZE. Only one page is required. 4KB has already been allocated by mmap. 
         if (phdr[phdr_idx].p_filesz <= PAGE_SIZE) {
 
-            // we read filesz bytes from the file
+            // we read filesz bytes from the file. file is guaranteed to have this many bytes.
             // and set the remaining bytes to zero 
             bytes = phdr[phdr_idx].p_filesz;
             memset(page_start + bytes, 0, phdr[phdr_idx].p_memsz - phdr[phdr_idx].p_filesz);
@@ -99,14 +100,14 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
             int N = phdr[phdr_idx].p_filesz/PAGE_SIZE + 1;
 
             if (0 <= page_idx && page_idx < N - 1) {
-                bytes = PAGE_SIZE;
+                bytes = PAGE_SIZE; // file is guaranteed to have this many bytes.
                 fragmentation += 0; // since we read an entire page, there's no fragementation
             }
 
             // Case 2.2: Faulty address arose from N - 1 page. filesz - offset bytes read from the file
             else if (page_idx == N - 1) {
 
-                bytes = phdr[phdr_idx].p_filesz - offset;
+                bytes = phdr[phdr_idx].p_filesz - offset; // this ensures we don't read more than filesz bytes
                 memset(page_start + bytes, 0, phdr[phdr_idx].p_memsz - phdr[phdr_idx].p_filesz);
 
                 // Previous 0...N-2 pages occupy (N - 1) * PAGE_SIZE
