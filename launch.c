@@ -2,7 +2,9 @@
 
 extern int num_pages_allocated;
 extern int num_page_faults;
-extern int fragmentation;
+extern int fragmentation_theoretical;
+extern int fragmentation_practical;
+extern int fragmentation_bytes_read;
 
 int main(int argc, char** argv) 
 {
@@ -21,8 +23,10 @@ int main(int argc, char** argv)
 
   printf("Number of pages allocated: %d\n", num_pages_allocated);
   printf("Number of page faults: %d\n", num_page_faults);
-  printf("Internal fragmentation in KB: %f\n", ( (float) fragmentation )/1024);
-  // printf("Internal fragmentation in KB: %d\n", fragmentation );
+
+  printf("Internal (theoretical) fragmentation: %d bytes = %f KB \n", fragmentation_theoretical, ( (float) fragmentation_theoretical )/1024);
+  printf("Internal (practical) fragmentation: %d bytes = %f KB \n", fragmentation_practical, ( (float) fragmentation_practical )/1024);
+  printf("Internal (bytes read) fragmentation: %d bytes = %f KB\n", fragmentation_bytes_read, ( (float) fragmentation_bytes_read )/1024);
 
   return 0;
 }

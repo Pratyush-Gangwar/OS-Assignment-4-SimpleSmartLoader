@@ -4,7 +4,10 @@
 
 int num_pages_allocated = 0;
 int num_page_faults = 0;
-int fragmentation = 0;
+
+int fragmentation_practical = 0;
+int fragmentation_theoretical = 0;
+int fragmentation_bytes_read = 0;
 
 // from loader.c
 extern Elf32_Ehdr *ehdr;
@@ -83,7 +86,9 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
             memset(page_start + bytes, 0, phdr[phdr_idx].p_memsz - phdr[phdr_idx].p_filesz);
 
             // fragmentation calculated from memory size, not bytes read
-            fragmentation += PAGE_SIZE - phdr[phdr_idx].p_memsz; 
+            fragmentation_practical += PAGE_SIZE - phdr[phdr_idx].p_memsz; 
+            fragmentation_theoretical += PAGE_SIZE - phdr[phdr_idx].p_memsz; 
+            fragmentation_bytes_read += PAGE_SIZE - bytes;
         }
 
         else {
@@ -101,7 +106,9 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
 
             if (0 <= page_idx && page_idx < N - 1) {
                 bytes = PAGE_SIZE; // file is guaranteed to have this many bytes.
-                fragmentation += 0; // since we read an entire page, there's no fragementation
+                fragmentation_practical += 0; // since we read an entire page, there's no fragementation
+                fragmentation_theoretical += 0;
+                fragmentation_bytes_read += 0;
             }
 
             // Case 2.2: Faulty address arose from N - 1 page. filesz - offset bytes read from the file
@@ -112,7 +119,9 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
 
                 // Previous 0...N-2 pages occupy (N - 1) * PAGE_SIZE
                 // Memory occupied by this segment is memsz - memory occupied by previous pages     
-                fragmentation += PAGE_SIZE - (phdr[phdr_idx].p_memsz - offset);
+                fragmentation_practical += PAGE_SIZE - (phdr[phdr_idx].p_memsz - offset);
+                fragmentation_theoretical += PAGE_SIZE - (phdr[phdr_idx].p_memsz - (N - 1) * PAGE_SIZE);
+                fragmentation_bytes_read += PAGE_SIZE - bytes;
             }
 
         }
@@ -132,12 +141,16 @@ void handler(int sig, siginfo_t* info, void* ucontext) {
 
         if (0 <= page_idx && page_idx < N - 1) {
             // printf("(internal page) ");
-            fragmentation += 0; // since we read an entire page, there's no fragementation
+            fragmentation_practical += 0; // since we read an entire page, there's no fragementation
+            fragmentation_theoretical += 0;
+            fragmentation_bytes_read += PAGE_SIZE;
         }
 
         // Case 2.2: Faulty address arose from N - 1 page. filesz - offset bytes read from the file
         else if (page_idx == N - 1) {
-            fragmentation += PAGE_SIZE - (phdr[phdr_idx].p_memsz - offset);
+            fragmentation_practical += PAGE_SIZE - (phdr[phdr_idx].p_memsz - offset);
+            fragmentation_theoretical += PAGE_SIZE - (phdr[phdr_idx].p_memsz - (N - 1) * PAGE_SIZE);
+            fragmentation_bytes_read += PAGE_SIZE;
         }
 
         // no read, just clear the bytes
