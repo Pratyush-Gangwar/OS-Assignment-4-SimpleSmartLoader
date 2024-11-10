@@ -1,3 +1,12 @@
+~~~ .text segment ~~~
+- vaddr is 0x08049000
+- Segfault occurs at 0x08049000
+- Page boundary is also 0x08049000
+- Offset of page boudary from vaddr is 0
+- filesz bytes are read from ELF file to memory page 
+- fragmentation is PAGE_SIZE - filesz
+
+~~~ Address Space for .data segment (zero-based index 3 in PHDR table) ~~~
 vaddr: 134529012 (- 134529012 = 0)
 
 vaddr + filesz - 1 (last byte of file content): 134529023 (-134529012 = 11)
@@ -15,3 +24,32 @@ vaddr + memsz (first byte after last of memsz bytes): 134533124 (- 134529012 = 4
 vaddr + 2 * 4096 - 1 (last byte of second non-aligned page starting at vaddr): 134537203 (- 134529012 = 8191)
 
 segfault2 + 4096 - 1 (last byte of aligned page starting at segfault2 boundary): 134537215 (- 134529012 = 8203)
+
+~~~ Eplanation ~~~
+- The file size is 12 bytes
+- The valid seek addresses are [p_offset + 0, p_offset + filesz - 1]
+- So, the valid seek offsets are [0, filesz - 1] where offset is used as seek(p_offset + offset)
+
+- vaddr + 0 in memory corresponds to p_offset + 0 in file 
+- vaddr + filesz - 1 in memory corresponds to p_offset + filesz - 1 in file 
+
+- However, the first segfault in .data segment occurs at vaddr + filesz in memory (i.e, one byte after the file-content ends)
+- The page boundary of this segfault is the same as the segfault address 
+- The offset of the page boundary from vaddr is (vaddr + filesz) - vaddr = filesz
+
+- The offset is outside the range of valid seek offsets [0, filesz - 1]
+- Therefore, you won't seek to this byte in the file 
+- So, no content from the file is mapped into the page corresponding to this segfault 
+- The page is merely cleared with zeroes 
+- 
+
+- The page allocated for the first segfault in .data ends at segfault1 + PAGE_SIZE - 1
+- Second page fault in .data segment occurs at (segfault1) + PAGE_SIZE (exactly one byte after the end of the previous page)
+
+- This segfault address is again its own page boundary
+- The offset of page boundary from vaddr is (segfault1) + PAGE_SIZE - vaddr = (vaddr + filesz) + PAGE_SIZE - vaddr = PAGE_SIZE + filesz 
+
+- Clearly, this offset is the outside the range of valid seek offsets [0, filesz - 1]
+- Therefore, you won't seek to this byte in the file 
+- So, no content from the file is mapped into the page corresponding to this segfault 
+- The page is merely cleared with zeroes 
